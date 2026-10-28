@@ -194,9 +194,39 @@ function setDue(id,c){P(id).due=c?"":$("dd").value;save();M();person(id)}
 const ph=n=>{n=n.replace(/\D/g,"");return n.length===10?"91"+n:n};
 function remind(id,s){var p=P(id),b=bal(id),m="Hello "+p.name+", "+(b>0?"a gentle reminder that "+money(b)+" is pending with you":"I will clear the pending "+money(b)+" soon")+(p.due&&b>0?" (due "+fd(p.due)+")":"")+". Thank you.";
   location.href=s?"sms:"+p.phone+"?body="+encodeURIComponent(m):"https://wa.me/"+ph(p.phone)+"?text="+encodeURIComponent(m)}
-function report(id){var p=P(id),b=bal(id),t=D.txns.filter(x=>x.pid===id).sort((a,c)=>a.date.localeCompare(c.date));
-  var m="Statement: "+p.name+"\n"+t.map(x=>fd(x.date)+"  "+(x.kind==="gave"?"Gave ":"Got ")+money(x.amt)+(x.note?" ("+x.note+")":"")).join("\n")+"\nBalance: "+money(b)+(b>0?" (to receive)":b<0?" (to pay)":" (settled)");
-  if(navigator.share)navigator.share({text:m}).catch(()=>{});else location.href="https://wa.me/"+(p.phone?ph(p.phone):"")+"?text="+encodeURIComponent(m)}
+function dlb(n,b){try{var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),800);return 1}catch(e){toast("Download is not available here")}}
+function dl(n,t,y){dlb(n,new Blob([t],{type:y}))}
+function shareFile(f,title,ok){
+  if(navigator.share&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:title}).then(()=>ok(1)).catch(e=>{if(e&&e.name==="AbortError")return;dlb(f.name,f);ok(0)})}
+  else{dlb(f.name,f);ok(0)}}
+function report(id){
+  toast("Preparing statement…");
+  var p=P(id),b=bal(id),run=0,rows=D.txns.filter(x=>x.pid===id).sort((a,c)=>a.date.localeCompare(c.date)||a.id.localeCompare(c.id)).map(x=>{run+=x.kind==="gave"?x.amt:-x.amt;return{x:x,r:run}});
+  var cut=rows.length>120;if(cut)rows=rows.slice(-120);
+  var W=760,RH=44,top=190,H=top+rows.length*RH+130+(cut?30:0),cv=document.createElement("canvas"),sc=2;
+  cv.width=W*sc;cv.height=H*sc;var g=cv.getContext("2d");g.scale(sc,sc);
+  var F=s=>{g.font=s+" system-ui,-apple-system,'Segoe UI',Roboto,sans-serif"};
+  g.fillStyle="#ffffff";g.fillRect(0,0,W,H);g.fillStyle="#4f46e5";g.fillRect(0,0,W,8);
+  F("700 28px");g.fillStyle="#0f172a";g.fillText("Account statement",32,58);
+  F("600 22px");g.fillText(p.name,32,96);
+  F("400 16px");g.fillStyle="#64748b";g.fillText((p.phone?p.phone+"  ·  ":"")+"As on "+fd(today()),32,124);
+  g.fillStyle="#f1f3f9";g.fillRect(24,top-34,W-48,36);
+  F("700 13px");g.fillStyle="#475569";g.fillText("DATE",36,top-10);g.fillText("DETAILS",150,top-10);
+  g.textAlign="right";g.fillText("GAVE",500,top-10);g.fillText("RECEIVED",610,top-10);g.fillText("BALANCE",W-36,top-10);g.textAlign="left";
+  rows.forEach((o,i)=>{var x=o.x,y=top+i*RH+RH/2+6;
+    if(i%2){g.fillStyle="#fafbfe";g.fillRect(24,top+i*RH,W-48,RH)}
+    F("400 15px");g.fillStyle="#334155";g.fillText(sd(x.date),36,y);
+    var nt=x.note||(x.kind==="gave"?"Money given":"Money received");if(nt.length>20)nt=nt.slice(0,19)+"…";g.fillText(nt,150,y);
+    g.textAlign="right";
+    if(x.kind==="gave"){g.fillStyle="#e11d48";g.fillText(money(x.amt),500,y)}else{g.fillStyle="#059669";g.fillText(money(x.amt),610,y)}
+    g.fillStyle="#0f172a";g.fillText((o.r<0?"−":"")+money(o.r),W-36,y);g.textAlign="left"});
+  var y0=top+rows.length*RH+8;
+  if(cut){F("italic 13px");g.fillStyle="#94a3b8";g.fillText("Showing the latest 120 entries",36,y0+14);y0+=30}
+  g.fillStyle="#e2e8f0";g.fillRect(24,y0+8,W-48,2);
+  F("700 20px");g.fillStyle="#0f172a";g.fillText(b>0?"Amount to receive":b<0?"Amount to pay":"All settled",36,y0+52);
+  F("800 28px");g.textAlign="right";g.fillStyle=b>0?"#059669":b<0?"#e11d48":"#0f172a";g.fillText(money(b),W-36,y0+56);g.textAlign="left";
+  F("400 12px");g.fillStyle="#94a3b8";g.fillText("Generated with Khata",36,y0+94);
+  cv.toBlob(bl=>{var f=new File([bl],"statement-"+p.name.replace(/\W+/g,"-").toLowerCase()+"-"+today()+".png",{type:"image/png"});shareFile(f,"Statement - "+p.name,()=>{})},"image/png")}
 function reports(){
   var now=new Date(),ms=[];for(var i=5;i>=0;i--){var d=new Date(now.getFullYear(),now.getMonth()-i,1);ms.push({k:d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2),l:d.toLocaleDateString("en-IN",{month:"short"}),g:0,r:0})}
   var lim=V.per==="m"?today().slice(0,7):V.per==="q"?ms[3].k:"",pg=0,pr=0;
@@ -210,21 +240,19 @@ function reports(){
   <div class="sec">Top to receive</div>${top.length?`<div class="lst">${top.map(o=>mr(o.p,o.b,"Pending")).join("")}</div>`:`<div class="empty"><small>Nobody owes you right now.</small></div>`}
   <div class="sec">Overdue</div>${od.length?`<div class="lst">${od.map(p=>mr(p,bal(p.id),due(p,bal(p.id)).t)).join("")}</div>`:`<div class="empty"><small>No overdue payments.</small></div>`}<div style="height:110px"></div>`}
 const mi=(i,l,s,f)=>`<button class="li" onclick="${f}"><span class="ci">${ic(i)}</span><span><b>${l}</b>${s?`<small>${s}</small>`:""}</span></button>`;
-function menu(){M(`<h3>More</h3>${mi("upload","Back up now","Share a backup file (Telegram, WhatsApp, Files)","bk()")}${mi("down2","Save backup to Downloads",bkStat(),"exp()")}${mi("hist","Restore from backup file","Choose a saved .json file","$('f').click()")}${mi("hist","Restore points","Daily copies kept on this phone","rpM()")}${mi("doc","Export to CSV","Open in Excel or Sheets","csv()")}${mi("theme","Theme","Currently: "+(C.theme||"auto"),"theme()")}${mi("lock","PIN lock",C.pin?"On":"Off","pinM()")}<input id="f" type="file" accept=".json,application/json" style="display:none" onchange="imp(this)">`)}
+function menu(){M(`<h3>More</h3>${mi("upload","Back up now","Share a backup file (Telegram, WhatsApp, Files)","bk()")}${mi("down2","Save backup to Downloads",bkStat(),"exp()")}${mi("hist","Restore from backup file","Choose a saved .json file","$('f').click()")}${mi("hist","Restore points","Daily copies kept on this phone","rpM()")}${mi("doc","Export to CSV","Open in Excel or Sheets","csv()")}${mi("theme","Theme","Currently: "+(C.theme||"auto"),"theme()")}${mi("lock","PIN lock",C.pin?"On":"Off","pinM()")}<input id="f" type="file" accept=".json,.txt,text/plain,application/json" style="display:none" onchange="imp(this)">`)}
 function theme(){C.theme=C.theme===""?"light":C.theme==="light"?"dark":"";saveC();applyTheme();menu()}
 function pinM(){M(`<h3>PIN lock</h3><small>A 4-digit PIN keeps casual users out. It is not encryption.</small><input id="np" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN"><div class="b">${C.pin?`<button class="no" onclick="C.pin='';saveC();M();toast('PIN removed')">Remove PIN</button>`:`<button onclick="M()">Cancel</button>`}<button class="ok" onclick="setPin()">Save PIN</button></div>`)}
 function setPin(){var v=$("np").value;if(!/^\d{4}$/.test(v))return toast("Enter 4 digits");C.pin=h(v);saveC();M();toast("PIN set")}
-function dl(n,t,y){try{var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:y}));a.download=n;a.click()}catch(e){toast("Download not available here")}}
 function csv(){var r=["Date,Person,Phone,Type,Amount,Note"];D.txns.slice().sort((a,c)=>a.date.localeCompare(c.date)).forEach(t=>{var p=P(t.pid)||{name:"",phone:""};r.push([t.date,p.name,p.phone,t.kind==="gave"?"Gave":"Received",t.amt,t.note].map(v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"').join(","))});dl("khata-"+today()+".csv",r.join("\n"),"text/csv");M()}
 function pay(){return JSON.stringify({app:"khata",v:1,t:new Date().toISOString(),parties:D.parties,txns:D.txns})}
 function snap(tag){if(!D.parties.length)return;try{var S=JSON.parse(localStorage.getItem("khata_snaps")||"[]");if(!tag&&S.length&&S[0].d===today())return;S.unshift({d:today(),j:JSON.stringify({parties:D.parties,txns:D.txns}),tag:tag||""});localStorage.setItem("khata_snaps",JSON.stringify(S.slice(0,7)))}catch(e){}}
 function bkBar(){
-  if(!D.parties.length)return `<div class="warn" onclick="$('rf').click()">${ic("hist")}Reinstalled? Tap to restore from a backup file</div><input id="rf" type="file" accept=".json,application/json" style="display:none" onchange="imp(this)">`;
+  if(!D.parties.length)return `<div class="warn" onclick="$('rf').click()">${ic("hist")}Reinstalled? Tap to restore from a backup file</div><input id="rf" type="file" accept=".json,.txt,text/plain,application/json" style="display:none" onchange="imp(this)">`;
   var s=C.since||0;if(!s&&C.lastBk)return "";var d=C.lastBk?Math.floor((Date.now()-C.lastBk)/864e5):-1,hot=s>=10||d<0||d>=7;
   return `<div class="warn${hot?" hot":""}" onclick="bk()">${ic("upload")}${d<0?"No backup yet":s+" change"+(s===1?"":"s")+" not backed up"+(d>=1?" · last backup "+d+"d ago":"")} · tap to back up</div>`}
-function bk(){var t=pay(),n="khata-backup-"+today()+".json",f;try{f=new File([t],n,{type:"application/json"})}catch(e){}
-  var done=()=>{C.since=0;C.lastBk=Date.now();saveC();M();render();toast("Backup saved")};
-  if(f&&navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f],title:"Khata backup"}).then(done).catch(()=>{});else{dl(n,t,"application/json");done()}}
+function bk(){var n="khata-backup-"+today()+".json",f=new File([pay()],n,{type:"text/plain"});
+  shareFile(f,"Khata backup",s=>{C.since=0;C.lastBk=Date.now();saveC();M();render();toast(s?"Backup shared":"Backup saved to your Downloads folder")})}
 function exp(){dl("khata-backup-"+today()+".json",pay(),"application/json");C.since=0;C.lastBk=Date.now();saveC();M();render()}
 function bkStat(){return C.lastBk?"Last backup "+fd(today(Math.floor((Date.now()-C.lastBk)/864e5)))+" · "+(C.since||0)+" changes since":"No file backup yet"}
 function load(d){snap("Before restore");D=d;persist();C.since=0;C.lastBk=Date.now();saveC();M();V.p=null;render();toast("Data restored")}
