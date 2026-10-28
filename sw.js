@@ -1,5 +1,5 @@
-var C="khata-v2",F=["./","index.html","manifest.webmanifest","icon-192.png","icon-512.png"];
+var C="khata-v3",F=["./","index.html","manifest.webmanifest","icon-192.png","icon-512.png"];
 self.addEventListener("install",function(e){e.waitUntil(caches.open(C).then(function(c){return c.addAll(F)}));self.skipWaiting()});
-self.addEventListener("activate",function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.filter(function(x){return x!==C}).map(function(x){return caches.delete(x)}))}));self.clients.claim()});
-self.addEventListener("fetch",function(e){var r=e.request;if(r.method!=="GET"||new URL(r.url).origin!==location.origin)return;
+self.addEventListener("activate",function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.filter(function(x){return x.indexOf("khata-")===0&&x!==C}).map(function(x){return caches.delete(x)}))}));self.clients.claim()});
+self.addEventListener("fetch",function(e){var r=e.request;if(r.method!=="GET"||new URL(r.url).origin!==location.origin||new URL(r.url).pathname.indexOf("/Khatta/")!==0)return;
 e.respondWith(fetch(r).then(function(n){var c=n.clone();caches.open(C).then(function(x){x.put(r,c)});return n}).catch(function(){return caches.match(r).then(function(m){return m||caches.match("index.html")})}))});
